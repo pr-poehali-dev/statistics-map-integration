@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
 import Icon from '@/components/ui/icon';
 
 type UserRole = 'user' | 'admin';
@@ -95,6 +96,7 @@ const mockEnterprises: Enterprise[] = [
 ];
 
 const Index = () => {
+  const { toast } = useToast();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>('user');
   const [selectedEnterprise, setSelectedEnterprise] = useState<Enterprise>(mockEnterprises[0]);
@@ -104,13 +106,38 @@ const Index = () => {
   const [selectedResponsible, setSelectedResponsible] = useState<string[]>([]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [hoveredEnterprise, setHoveredEnterprise] = useState<number | null>(null);
+  const [enterprises, setEnterprises] = useState<Enterprise[]>(mockEnterprises);
 
-  const regions = Array.from(new Set(mockEnterprises.map(e => e.region)));
-  const deviationTypes = Array.from(new Set(mockEnterprises.flatMap(e => e.deviations.map(d => d.type))));
-  const responsiblePersons = Array.from(new Set(mockEnterprises.flatMap(e => e.deviations.map(d => d.responsible))));
+  const updateDeviationStatus = (deviationId: number, newStatus: 'critical' | 'warning' | 'normal') => {
+    setEnterprises(prevEnterprises => 
+      prevEnterprises.map(enterprise => ({
+        ...enterprise,
+        deviations: enterprise.deviations.map(deviation => 
+          deviation.id === deviationId 
+            ? { ...deviation, status: newStatus }
+            : deviation
+        )
+      }))
+    );
+
+    const statusLabels = {
+      critical: 'Критично',
+      warning: 'Важно',
+      normal: 'Нормально'
+    };
+
+    toast({
+      title: 'Приоритет изменён',
+      description: `Новый статус: ${statusLabels[newStatus]}`,
+    });
+  };
+
+  const regions = Array.from(new Set(enterprises.map(e => e.region)));
+  const deviationTypes = Array.from(new Set(enterprises.flatMap(e => e.deviations.map(d => d.type))));
+  const responsiblePersons = Array.from(new Set(enterprises.flatMap(e => e.deviations.map(d => d.responsible))));
 
   const filteredEnterprises = userRole === 'admin' 
-    ? mockEnterprises.filter(e => {
+    ? enterprises.filter(e => {
         const regionMatch = selectedRegions.length === 0 || selectedRegions.includes(e.region);
         const enterpriseMatch = selectedEnterprises.length === 0 || selectedEnterprises.includes(e.id);
         const deviationTypeMatch = selectedDeviationTypes.length === 0 || 
@@ -266,7 +293,7 @@ const Index = () => {
             </h2>
             <p className="text-sm text-muted-foreground">
               {userRole === 'admin' 
-                ? `Отображено предприятий: ${filteredEnterprises.length} из ${mockEnterprises.length}`
+                ? `Отображено предприятий: ${filteredEnterprises.length} из ${enterprises.length}`
                 : selectedEnterprise.name
               }
             </p>
@@ -354,16 +381,16 @@ const Index = () => {
                           variant="ghost" 
                           size="sm"
                           onClick={() => setSelectedEnterprises(
-                            selectedEnterprises.length === mockEnterprises.length 
+                            selectedEnterprises.length === enterprises.length 
                               ? [] 
-                              : mockEnterprises.map(e => e.id)
+                              : enterprises.map(e => e.id)
                           )}
                         >
                           {selectedEnterprises.length === mockEnterprises.length ? 'Сбросить' : 'Выбрать все'}
                         </Button>
                       </div>
                       <div className="space-y-3">
-                        {mockEnterprises.map(enterprise => (
+                        {enterprises.map(enterprise => (
                           <div key={enterprise.id} className="flex items-center space-x-2">
                             <Checkbox 
                               id={`ent-${enterprise.id}`}
@@ -709,7 +736,7 @@ const Index = () => {
                               borderLeftColor: deviation.status === 'critical' ? '#dc2626' : '#f59e0b'
                             }}>
                               <CardContent className="pt-4">
-                                <div className="mb-3 flex items-start justify-between">
+                                <div className="mb-3 flex items-start justify-between gap-3">
                                   <div className="flex-1">
                                     <h4 className="font-semibold text-base mb-1">{deviation.type}</h4>
                                     {userRole === 'admin' && (
@@ -719,9 +746,44 @@ const Index = () => {
                                       </div>
                                     )}
                                   </div>
-                                  <Badge variant={deviation.status === 'critical' ? 'destructive' : 'outline'}>
-                                    {deviation.status === 'critical' ? 'Критично' : 'Предупреждение'}
-                                  </Badge>
+                                  <div className="flex items-center gap-2">
+                                    {userRole === 'admin' ? (
+                                      <Select 
+                                        value={deviation.status} 
+                                        onValueChange={(value: 'critical' | 'warning' | 'normal') => 
+                                          updateDeviationStatus(deviation.id, value)
+                                        }
+                                      >
+                                        <SelectTrigger className="w-[140px] h-8">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="critical">
+                                            <div className="flex items-center gap-2">
+                                              <div className="h-2 w-2 rounded-full bg-red-600"></div>
+                                              Критично
+                                            </div>
+                                          </SelectItem>
+                                          <SelectItem value="warning">
+                                            <div className="flex items-center gap-2">
+                                              <div className="h-2 w-2 rounded-full bg-yellow-500"></div>
+                                              Важно
+                                            </div>
+                                          </SelectItem>
+                                          <SelectItem value="normal">
+                                            <div className="flex items-center gap-2">
+                                              <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                                              Нормально
+                                            </div>
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    ) : (
+                                      <Badge variant={deviation.status === 'critical' ? 'destructive' : 'outline'}>
+                                        {deviation.status === 'critical' ? 'Критично' : 'Предупреждение'}
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </div>
                                 <p className="mb-3 text-sm text-muted-foreground bg-muted/30 p-3 rounded">
                                   {deviation.description}
